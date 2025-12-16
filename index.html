@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>味方(a) vs 敵(b) - 全部入り</title>
+  <style>
+    :root{
+      --bg:#0b0b10;
+      --panel:#151525;
+      --text:#e9e9f2;
+      --muted:#a9a9c0;
+      --good:#57d38c;
+      --bad:#ff5a6a;
+      --accent:#7aa7ff;
+    }
+    html,body{height:100%; margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background:var(--bg); color:var(--text);}
+    .wrap{min-height:100%; display:flex; flex-direction:column; align-items:center; gap:10px; padding:12px 12px env(safe-area-inset-bottom); box-sizing:border-box;}
+    header{
+      width:min(960px, 100%);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:10px 12px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:12px;
+      box-sizing:border-box;
+    }
+    .title{font-weight:800; letter-spacing:.02em;}
+    .hint{font-size:12px; color:var(--muted); line-height:1.4;}
+    .hud{display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end;}
+    .pill{
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:999px;
+      padding:6px 10px;
+      font-size:12px;
+      color:var(--muted);
+      display:flex; gap:8px; align-items:center;
+      user-select:none;
+    }
+    .bar{ width:120px; height:8px; background:rgba(255,255,255,0.10); border-radius:999px; overflow:hidden; }
+    .bar > i{ display:block; height:100%; width:100%; background:var(--good); }
+    .bar.bad > i{ background:var(--bad); }
+    .stage{
+      width:min(960px, 100%);
+      background:var(--panel);
+      border:1px solid rgba(255,255,255,0.10);
+      border-radius:16px;
+      overflow:hidden;
+      position:relative;
+    }
+    canvas{ display:block; width:100%; height:auto; touch-action:none; }
+
+    .controls{
+      width:min(960px, 100%);
+      display:flex;
+      gap:10px;
+      justify-content:space-between;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .btnRow{ display:flex; gap:10px; align-items:center; }
+    button{
+      appearance:none;
+      border:none;
+      background:rgba(255,255,255,0.08);
+      color:var(--text);
+      border:1px solid rgba(255,255,255,0.14);
+      border-radius:12px;
+      padding:12px 14px;
+      font-size:14px;
+      font-weight:800;
+      user-select:none;
+    }
+    button:active{ transform: translateY(1px); }
+    .primary{ background:rgba(122,167,255,0.18); border-color: rgba(122,167,255,0.35); }
+    .danger{ background:rgba(255,90,106,0.16); border-color: rgba(255,90,106,0.35); }
+    .ok{ background:rgba(87,211,140,0.16); border-color: rgba(87,211,140,0.35); }
+
+    .note{
+      width:min(960px, 100%);
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.6;
+      margin-bottom:6px;
+    }
+
+    @media (max-width:560px){
+      .bar{ width:92px; }
+      button{ padding:14px 14px; flex:1; }
+      .btnRow{ width:100%; }
+      .btnRow button{ flex:1; }
+    }
+
+    .overlay{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:rgba(0,0,0,0.52);
+      opacity:0;
+      pointer-events:none;
+      transition:opacity .15s ease;
+    }
+    .overlay.show{ opacity:1; pointer-events:auto; }
+    .card{
+      width:min(560px, 92%);
+      background:rgba(20,20,35,0.92);
+      border:1px solid rgba(255,255,255,0.14);
+      border-radius:16px;
+      padding:16px;
+      box-shadow:0 12px 40px rgba(0,0,0,0.45);
+    }
+    .card h2{ margin:0 0 6px; font-size:18px; }
+    .card p{ margin:6px 0; color:var(--muted); font-size:13px; line-height:1.6; }
+    .card .row{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+    .card .row button{ flex:1; min-width:160px; }
+    .rank{
+      margin-top:10px;
+      padding:10px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.12);
+      background:rgba(255,255,255,0.05);
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.6;
+      white-space:pre-line;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title">味方(a.png) vs 敵(b.png)（全部入り）</div>
+      <div class="hint">
+        タップ/クリック＝攻撃　｜　味方をタップ＝必殺技　｜　左右ボタン＝移動　｜　BGM/SEはONで音が出ます
+      </div>
+    </div>
+    <div class="hud">
+      <div class="pill">
+        味方HP
+        <span class="bar"><i id="hpP"></i></span>
+      </div>
+      <div class="pill">
+        敵HP
+        <span class="bar bad"><i id="hpE"></i></span>
+      </div>
+      <div class="pill">Time <b id="time">0.0</b>s</div>
+      <div class="pill">Score <b id="score">0</b></div>
+    </div>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <h2 id="resultTitle">結果</h2>
+        <p id="resultText"></p>
+        <div class="rank" id="rankBox"></div>
+        <div class="row">
+          <button class="primary" id="restartBtn">もう一回</button>
+          <button id="closeBtn">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="btnRow">
+      <button id="leftBtn">← 左</button>
+      <button id="rightBtn">右 →</button>
+    </div>
+    <div class="btnRow">
+      <button class="primary" id="shootBtn">攻撃</button>
+      <button class="ok" id="bgmBtn">BGM: OFF</button>
+      <button class="ok" id="seBtn">SE: ON</button>
+      <button class="danger" id="resetBtn">リセット</button>
+    </div>
+  </div>
+
+  <div class="note">
+    同じフォルダに <b>index.html / a.png / b.png</b> を置いて開いてください。<br/>
+    背景画像を使うなら（任意）：<b>bg.jpg</b> を同フォルダへ。<br/>
+    ランキングはこのブラウザに保存（localStorage）されます。
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('cv');
+  const stage  = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+
+  const hpP = document.getElementById('hpP');
+  const hpE = document.getElementById('hpE');
+  const scoreEl = document.getElementById('score');
+  const timeEl  = document.getElementById('time');
+
+  const overlay = document.getElementById('overlay');
+  const resultTitle = document.getElementById('resultTitle');
+  const resultText  = document.getElementById('resultText');
+  const rankBox     = document.getElementById('rankBox');
+  const restartBtn  = document.getElementById('restartBtn');
+  const closeBtn    = document.getElementById('closeBtn');
+
+  const leftBtn  = document.getElementById('leftBtn');
+  const rightBtn = document.getElementById('rightBtn');
+  const shootBtn = document.getElementById('shootBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const bgmBtn   = document.getElementById('bgmBtn');
+  const seBtn    = document.getElementById('seBtn');
+
+  // 画像
+  const imgA = new Image(); imgA.src = 'a.png';
+  const imgB = new Image(); imgB.src = 'b.png';
+
+  // 背景画像（任意）
+  const bgImg = new Image();
+  bgImg.src = 'bg.png';
+  let bgAvailable = false;
+  bgImg.onload = () => { bgAvailable = true; };
+  bgImg.onerror = () => { bgAvailable = false; };
+
+  // 音（WebAudio）
+  let audioCtx = null;
+  let bgmOn = false;
+  let seOn = true;
+  let bgmNodes = null;
+
+  function ensureAudio(){
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function beep(type='sine', freq=440, dur=0.08, gain=0.08){
+    if (!seOn) return;
+    ensureAudio();
+    const t0 = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  }
+
+  function startBgm(){
+    ensureAudio();
+    if (bgmNodes) return;
+
+    // 簡易BGM：2オシレーター＋軽いフィルタでループ感
+    const master = audioCtx.createGain();
+    master.gain.value = 0.03;
+
+    const filt = audioCtx.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.value = 900;
+
+    const o1 = audioCtx.createOscillator();
+    const o2 = audioCtx.createOscillator();
+    o1.type='triangle';
+    o2.type='sine';
+
+    const g1 = audioCtx.createGain();
+    const g2 = audioCtx.createGain();
+    g1.gain.value = 0.9;
+    g2.gain.value = 0.6;
+
+    o1.connect(g1).connect(filt);
+    o2.connect(g2).connect(filt);
+    filt.connect(master).connect(audioCtx.destination);
+
+    const base = 220;
+    const seq = [0, 3, 5, 7, 5, 3, 0, -2]; // 半音
+    let idx = 0;
+
+    const tick = () => {
+      if (!bgmOn || !bgmNodes) return;
+      const t = audioCtx.currentTime;
+      const st = seq[idx % seq.length];
+      const f = base * Math.pow(2, st/12);
+      o1.frequency.setValueAtTime(f, t);
+      o2.frequency.setValueAtTime(f*2, t);
+      idx++;
+      bgmNodes.timer = setTimeout(tick, 240);
+    };
+
+    o1.start();
+    o2.start();
+    bgmNodes = { master, filt, o1, o2, g1, g2, timer:null };
+    tick();
+  }
+
+  function stopBgm(){
+    if (!bgmNodes) return;
+    try{
+      clearTimeout(bgmNodes.timer);
+      bgmNodes.master.gain.value = 0.0001;
+      bgmNodes.o1.stop();
+      bgmNodes.o2.stop();
+    }catch(_){}
+    bgmNodes = null;
+  }
+
+  function setBgm(on){
+    bgmOn = on;
+    bgmBtn.textContent = `BGM: ${bgmOn ? 'ON' : 'OFF'}`;
+    if (bgmOn) startBgm(); else stopBgm();
+  }
+  function setSe(on){
+    seOn = on;
+    seBtn.textContent = `SE: ${seOn ? 'ON' : 'OFF'}`;
+  }
+
+  bgmBtn.addEventListener('click', () => setBgm(!bgmOn));
+  seBtn.addEventListener('click', () => setSe(!seOn));
+
+  // ワールド
+  const WORLD = { w: 960, h: 540, groundPad: 26 };
+
+  // 状態
+  let running = true;
+  let score = 0;
+  let elapsed = 0;
+
+  // ランキング
+  const RANK_KEY = 'a_vs_b_rank_v1';
+  function loadRank(){
+    try{
+      const a = JSON.parse(localStorage.getItem(RANK_KEY) || '[]');
+      return Array.isArray(a) ? a : [];
+    }catch(_){ return []; }
+  }
+  function saveRank(list){
+    localStorage.setItem(RANK_KEY, JSON.stringify(list.slice(0,5)));
+  }
+  function addRank(entry){
+    const list = loadRank();
+    list.push(entry);
+    list.sort((x,y)=> y.score - x.score);
+    saveRank(list);
+    return list.slice(0,5);
+  }
+  function formatRank(list){
+    if (!list.length) return 'Ranking: まだ記録がありません';
+    let s = 'Ranking (Top5)\n';
+    list.forEach((r,i)=>{
+      s += `${i+1}. ${r.score} pt  /  ${r.time.toFixed(1)}s\n`;
+    });
+    return s.trim();
+  }
+
+  // プレイヤー/敵
+  const player = {
+    x: 180, y: 0, w: 92, h: 92,
+    hp: 110, maxHp: 110,
+    speed: 460,
+    cooldown: 0,
+    ultCd: 0
+  };
+  const enemy = {
+    x: 720, y: 0, w: 92, h: 92,
+    hp: 180, maxHp: 180,
+    vx: 0,
+    shotT: 0
+  };
+
+  const bulletsP = [];
+  const bulletsE = [];
+  const particles = [];
+  const shockwaves = []; // 必殺技の波
+
+  const input = { left:false, right:false };
+
+  function fitCanvas(){
+    const rect = stage.getBoundingClientRect();
+    const cssW = rect.width;
+    const cssH = cssW * (WORLD.h / WORLD.w);
+
+    canvas.style.height = cssH + 'px';
+    canvas.width  = Math.floor(cssW * devicePixelRatio);
+    canvas.height = Math.floor(cssH * devicePixelRatio);
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  }
+  window.addEventListener('resize', fitCanvas, {passive:true});
+  fitCanvas();
+
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+  // 当たり判定を「甘く」：当たり矩形を縮める
+  function shrinkRect(r, pad){
+    return { x:r.x+pad, y:r.y+pad, w:Math.max(1, r.w-2*pad), h:Math.max(1, r.h-2*pad) };
+  }
+  function rectHit(a,b){
+    return (a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y);
+  }
+
+  function toWorldFromClient(clientX, clientY){
+    const rect = stage.getBoundingClientRect();
+    const scale = WORLD.w / rect.width;
+    const x = (clientX - rect.left) * scale;
+    const y = (clientY - rect.top)  * scale;
+    return {x,y};
+  }
+
+  function shootFromPlayer(){
+    if (!running) return;
+    if (player.cooldown > 0) return;
+    player.cooldown = 0.16;
+
+    const bx = player.x + player.w - 8;
+    const by = player.y + player.h * 0.52;
+    bulletsP.push({ x:bx, y:by, r:6, vx:840, vy:(Math.random()*70-35), dmg:10 });
+    beep('square', 760, 0.06, 0.06);
+
+    for(let i=0;i<6;i++){
+      particles.push({ x:bx, y:by, vx: 140 + Math.random()*260, vy:(Math.random()*260-130), life: 0.25+Math.random()*0.25 });
+    }
+  }
+
+  function ultimate(){
+    if (!running) return;
+    if (player.ultCd > 0) return;
+    player.ultCd = 6.5;
+
+    // 衝撃波：広範囲で敵弾消し＋敵に大ダメージ（1回）
+    shockwaves.push({ x: player.x + player.w*0.55, y: player.y + player.h*0.55, r: 10, vr: 980, life: 0.45 });
+    beep('sawtooth', 180, 0.14, 0.08);
+    setTimeout(()=>beep('sawtooth', 140, 0.18, 0.07), 60);
+
+    // 敵弾を消す
+    bulletsE.length = 0;
+  }
+
+  function enemyShoot(){
+    // 追いかけながら狙い撃ち
+    const bx = enemy.x + 10;
+    const by = enemy.y + enemy.h * 0.58;
+
+    const aimX = player.x + player.w * 0.55;
+    const aimY = player.y + player.h * 0.55;
+
+    const dx = aimX - bx;
+    const dy = aimY - by;
+    const len = Math.max(1, Math.hypot(dx,dy));
+    const spd = 560;
+
+    bulletsE.push({ x:bx, y:by, r:7, vx:(dx/len)*spd, vy:(dy/len)*spd, dmg:14 });
+    beep('sine', 320, 0.05, 0.045);
+  }
+
+  // 入力（canvas）
+  let pointerDown=false;
+  let lastPX=0;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    pointerDown = true;
+    lastPX = e.clientX;
+
+    const p = toWorldFromClient(e.clientX, e.clientY);
+    const pr = { x:player.x, y:player.y, w:player.w, h:player.h };
+    // 味方キャラをタップしたら必殺技
+    if (rectHit({x:p.x,y:p.y,w:1,h:1}, pr)){
+      ultimate();
+      return;
+    }
+    // それ以外は通常攻撃
+    shootFromPlayer();
+  }, {passive:true});
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pointerDown) return;
+    const dx = e.clientX - lastPX;
+    lastPX = e.clientX;
+    const rect = stage.getBoundingClientRect();
+    const scale = WORLD.w / rect.width;
+    player.x += dx * scale;
+  }, {passive:true});
+
+  window.addEventListener('pointerup', ()=> pointerDown=false, {passive:true});
+
+  function bindHold(btn, key){
+    const on = () => input[key] = true;
+    const off = () => input[key] = false;
+    btn.addEventListener('pointerdown', on, {passive:true});
+    btn.addEventListener('pointerup', off, {passive:true});
+    btn.addEventListener('pointercancel', off, {passive:true});
+    btn.addEventListener('pointerleave', off, {passive:true});
+  }
+  bindHold(leftBtn,'left');
+  bindHold(rightBtn,'right');
+
+  shootBtn.addEventListener('click', () => { ensureAudio(); shootFromPlayer(); });
+  resetBtn.addEventListener('click', () => resetGame());
+
+  restartBtn.addEventListener('click', () => { hideOverlay(); resetGame(); });
+  closeBtn.addEventListener('click', hideOverlay);
+
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'ArrowLeft') input.left = true;
+    if (e.key === 'ArrowRight') input.right = true;
+    if (e.key === ' ' || e.key === 'Enter') { ensureAudio(); shootFromPlayer(); }
+    if (e.key === 'Shift') { ensureAudio(); ultimate(); }
+  });
+  window.addEventListener('keyup', (e)=>{
+    if (e.key === 'ArrowLeft') input.left = false;
+    if (e.key === 'ArrowRight') input.right = false;
+  });
+
+  function syncHud(){
+    hpP.style.width = (player.hp / player.maxHp * 100).toFixed(1) + '%';
+    hpE.style.width = (enemy.hp  / enemy.maxHp  * 100).toFixed(1) + '%';
+    scoreEl.textContent = String(score);
+    timeEl.textContent  = elapsed.toFixed(1);
+  }
+
+  function showOverlay(title, text, rankList){
+    resultTitle.textContent = title;
+    resultText.textContent  = text;
+    rankBox.textContent = formatRank(rankList || loadRank());
+    overlay.classList.add('show');
+  }
+  function hideOverlay(){ overlay.classList.remove('show'); }
+
+  function resetGame(){
+    running = true;
+    score = 0;
+    elapsed = 0;
+
+    player.x = 190; player.hp = player.maxHp; player.cooldown = 0; player.ultCd = 0;
+    enemy.x  = 740; enemy.hp  = enemy.maxHp; enemy.vx = 0; enemy.shotT = 0;
+
+    bulletsP.length = 0;
+    bulletsE.length = 0;
+    particles.length = 0;
+    shockwaves.length = 0;
+
+    syncHud();
+  }
+
+  function endGame(win){
+    running = false;
+
+    // 時間ボーナス：早いほど加点（最低0）
+    const timeBonus = Math.max(0, Math.floor((60 - elapsed) * 3));
+    const finalScore = score + timeBonus;
+
+    const title = win ? '勝利！' : '敗北…';
+    const text  = win
+      ? `敵を倒しました。スコア：${finalScore}（基本${score} + 時間${timeBonus}） / ${elapsed.toFixed(1)}s`
+      : `やられました。スコア：${finalScore}（基本${score} + 時間${timeBonus}） / ${elapsed.toFixed(1)}s`;
+
+    const ranks = addRank({ score: finalScore, time: elapsed, at: Date.now(), win });
+    showOverlay(title, text, ranks);
+
+    beep(win ? 'triangle' : 'sine', win ? 520 : 160, 0.18, 0.08);
+  }
+
+  function update(dt){
+    if (!running) return;
+
+    elapsed += dt;
+    player.cooldown = Math.max(0, player.cooldown - dt);
+    player.ultCd    = Math.max(0, player.ultCd - dt);
+
+    // 地面固定
+    player.y = WORLD.h - WORLD.groundPad - player.h;
+    enemy.y  = WORLD.h - WORLD.groundPad - enemy.h;
+
+    // プレイヤー移動
+    let ax = 0;
+    if (input.left) ax -= 1;
+    if (input.right) ax += 1;
+    player.x += ax * player.speed * dt;
+    player.x = clamp(player.x, 20, WORLD.w - player.w - 20);
+
+    // 敵AI：追跡（プレイヤーに寄る）。距離でスピード変化
+    const centerE = enemy.x + enemy.w*0.5;
+    const centerP = player.x + player.w*0.5;
+    const dx = centerP - centerE;
+    const dist = Math.abs(dx);
+    const dir = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+
+    const chaseSpd = clamp(140 + dist*0.45, 160, 360);
+    enemy.vx = dir * chaseSpd * 0.95;
+
+    enemy.x += enemy.vx * dt;
+
+    // 敵は左側に寄りすぎない（ゲーム性のため）
+    enemy.x = clamp(enemy.x, WORLD.w*0.50, WORLD.w - enemy.w - 20);
+
+    // 敵の射撃：HPが減るほど間隔短縮
+    enemy.shotT += dt;
+    const hpRatio = enemy.hp / enemy.maxHp;
+    const interval = clamp(0.95 - (1 - hpRatio)*0.45, 0.45, 0.95);
+    if (enemy.shotT >= interval){
+      enemy.shotT = 0;
+      enemyShoot();
+    }
+
+    // 弾更新
+    for (let i=bulletsP.length-1;i>=0;i--){
+      const b = bulletsP[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.x > WORLD.w + 40) bulletsP.splice(i,1);
+    }
+    for (let i=bulletsE.length-1;i>=0;i--){
+      const b = bulletsE[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      if (b.x < -60 || b.x > WORLD.w + 60 || b.y < -60 || b.y > WORLD.h + 60) bulletsE.splice(i,1);
+    }
+
+    // 必殺技（衝撃波）
+    for (let i=shockwaves.length-1;i>=0;i--){
+      const s = shockwaves[i];
+      s.r += s.vr * dt;
+      s.life -= dt;
+      if (s.life <= 0) shockwaves.splice(i,1);
+    }
+
+    // パーティクル
+    for (let i=particles.length-1;i>=0;i--){
+      const p = particles[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) particles.splice(i,1);
+    }
+
+    // 当たり判定（甘め：矩形を縮める）
+    const enemyRectBase  = { x:enemy.x,  y:enemy.y,  w:enemy.w,  h:enemy.h  };
+    const playerRectBase = { x:player.x, y:player.y, w:player.w, h:player.h };
+
+    const enemyRect  = shrinkRect(enemyRectBase, 10);
+    const playerRect = shrinkRect(playerRectBase, 10);
+
+    // 味方弾→敵
+    for (let i=bulletsP.length-1;i>=0;i--){
+      const b = bulletsP[i];
+      const br = { x:b.x-b.r, y:b.y-b.r, w:b.r*2, h:b.r*2 };
+      if (rectHit(br, enemyRect)){
+        bulletsP.splice(i,1);
+        enemy.hp = Math.max(0, enemy.hp - b.dmg);
+        score += 10;
+
+        beep('square', 680, 0.04, 0.045);
+        for(let k=0;k<10;k++){
+          particles.push({ x:b.x, y:b.y, vx:(Math.random()*380-190), vy:(Math.random()*380-190), life:0.22+Math.random()*0.28 });
+        }
+      }
+    }
+
+    // 敵弾→味方
+    for (let i=bulletsE.length-1;i>=0;i--){
+      const b = bulletsE[i];
+      const br = { x:b.x-b.r, y:b.y-b.r, w:b.r*2, h:b.r*2 };
+      if (rectHit(br, playerRect)){
+        bulletsE.splice(i,1);
+        player.hp = Math.max(0, player.hp - b.dmg);
+
+        beep('sine', 220, 0.06, 0.05);
+        for(let k=0;k<14;k++){
+          particles.push({ x:b.x, y:b.y, vx:(Math.random()*420-210), vy:(Math.random()*420-210), life:0.22+Math.random()*0.30 });
+        }
+      }
+    }
+
+    // 衝撃波→敵（1波で複数回当たらないように、簡易に“半径内”で大ダメ）
+    for (const s of shockwaves){
+      const ex = enemy.x + enemy.w*0.5;
+      const ey = enemy.y + enemy.h*0.55;
+      const d = Math.hypot(ex - s.x, ey - s.y);
+      // 波が通過中（リング厚）
+      const ring = 30;
+      if (d > s.r - ring && d < s.r + ring){
+        enemy.hp = Math.max(0, enemy.hp - 22);
+        score += 15;
+        for(let k=0;k<16;k++){
+          particles.push({ x:ex, y:ey, vx:(Math.random()*520-260), vy:(Math.random()*520-260), life:0.20+Math.random()*0.25 });
+        }
+      }
+    }
+
+    syncHud();
+
+    if (enemy.hp <= 0) endGame(true);
+    else if (player.hp <= 0) endGame(false);
+  }
+
+  function draw(){
+    const rect = stage.getBoundingClientRect();
+    const scale = rect.width / WORLD.w;
+
+    const cssW = rect.width;
+    const cssH = rect.width * (WORLD.h / WORLD.w);
+    ctx.clearRect(0,0, cssW, cssH);
+
+    ctx.save();
+    ctx.scale(scale, scale);
+
+    // 背景
+    ctx.fillStyle = '#0b0b12';
+    ctx.fillRect(0,0, WORLD.w, WORLD.h);
+
+    if (bgAvailable){
+      // 背景画像（トリミングしてフィット）
+      const iw = bgImg.naturalWidth || 1;
+      const ih = bgImg.naturalHeight || 1;
+      const sw = iw, sh = ih;
+      const tw = WORLD.w, th = WORLD.h;
+      const sAspect = sw/sh, tAspect = tw/th;
+      let sx=0, sy=0, ssw=sw, ssh=sh;
+      if (sAspect > tAspect){
+        ssw = sh * tAspect;
+        sx = (sw - ssw)/2;
+      }else{
+        ssh = sw / tAspect;
+        sy = (sh - ssh)/2;
+      }
+      ctx.globalAlpha = 0.35;
+      ctx.drawImage(bgImg, sx, sy, ssw, ssh, 0, 0, WORLD.w, WORLD.h);
+      ctx.globalAlpha = 1;
+    }
+
+    // うっすらパターン
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+    ctx.lineWidth = 1;
+    for(let x=0; x<=WORLD.w; x+=40){
+      ctx.beginPath();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x,WORLD.h);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // 地面
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, WORLD.h - WORLD.groundPad);
+    ctx.lineTo(WORLD.w, WORLD.h - WORLD.groundPad);
+    ctx.stroke();
+
+    // 必殺技：衝撃波
+    for (const s of shockwaves){
+      const a = Math.max(0, Math.min(1, s.life / 0.45));
+      ctx.strokeStyle = `rgba(122,167,255,${0.35*a})`;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+      ctx.stroke();
+    }
+
+    // 弾
+    for (const b of bulletsP){
+      ctx.fillStyle = 'rgba(122,167,255,0.95)';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    for (const b of bulletsE){
+      ctx.fillStyle = 'rgba(255,90,106,0.95)';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    // パーティクル
+    for (const p of particles){
+      const a = Math.max(0, Math.min(1, p.life / 0.5));
+      ctx.fillStyle = `rgba(255,255,255,${0.38*a})`;
+      ctx.fillRect(p.x, p.y, 2.4, 2.4);
+    }
+
+    // キャラ
+    drawChar(imgA, player.x, player.y, player.w, player.h, '味方');
+    drawChar(imgB, enemy.x,  enemy.y,  enemy.w,  enemy.h,  '敵');
+
+    // UIテキスト
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = '14px system-ui, -apple-system, "Noto Sans JP", sans-serif';
+    ctx.fillText('味方タップ=必殺技（ShiftでもOK）', 18, 32);
+
+    // 必殺CD表示
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    const cd = Math.max(0, player.ultCd);
+    ctx.fillText(`必殺CD: ${cd.toFixed(1)}s`, 18, 52);
+
+    ctx.restore();
+  }
+
+  function drawChar(img, x,y,w,h,label){
+    if (img.complete && img.naturalWidth > 0){
+      ctx.drawImage(img, x, y, w, h);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(x,y,w,h);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.font = '14px system-ui';
+      ctx.fillText(label, x+10, y+24);
+    }
+  }
+
+  // ループ
+  let last = performance.now();
+  function loop(t){
+    const dt = Math.min(0.033, (t - last) / 1000);
+    last = t;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // 初期状態
+  setBgm(false);
+  setSe(true);
+  resetGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
