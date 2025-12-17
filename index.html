@@ -2,8 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <!-- ★修正：iOSの拡大（ズーム）を抑止 -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>味方(a) vs 敵(b) - 全部入り</title>
   <style>
     :root{
@@ -15,18 +14,7 @@
       --bad:#ff5a6a;
       --accent:#7aa7ff;
     }
-
-    /* ★修正：スクロール/拡大まわりの抑止 */
-    html,body{
-      height:100%;
-      margin:0;
-      font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
-      background:var(--bg);
-      color:var(--text);
-      overscroll-behavior: none;
-      -webkit-text-size-adjust: 100%;
-    }
-
+    html,body{height:100%; margin:0; font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; background:var(--bg); color:var(--text);}
     .wrap{min-height:100%; display:flex; flex-direction:column; align-items:center; gap:10px; padding:12px 12px env(safe-area-inset-bottom); box-sizing:border-box;}
     header{
       width:min(960px, 100%);
@@ -49,7 +37,6 @@
       color:var(--muted);
       display:flex; gap:8px; align-items:center;
       user-select:none;
-      -webkit-user-select:none;
     }
     .bar{ width:120px; height:8px; background:rgba(255,255,255,0.10); border-radius:999px; overflow:hidden; }
     .bar > i{ display:block; height:100%; width:100%; background:var(--good); }
@@ -61,15 +48,7 @@
       border-radius:16px;
       overflow:hidden;
       position:relative;
-
-      /* ★修正：ダブルタップ拡大抑止 */
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
-      user-select:none;
-      -webkit-user-select:none;
     }
-
-    /* canvasはもともと touch-action:none なのでOK（ピンチ/スクロールを受けない） */
     canvas{ display:block; width:100%; height:auto; touch-action:none; }
 
     .controls{
@@ -81,7 +60,6 @@
       flex-wrap:wrap;
     }
     .btnRow{ display:flex; gap:10px; align-items:center; }
-
     button{
       appearance:none;
       border:none;
@@ -92,12 +70,7 @@
       padding:12px 14px;
       font-size:14px;
       font-weight:800;
-
-      /* ★修正：ボタンのダブルタップ拡大抑止 */
-      touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
       user-select:none;
-      -webkit-user-select:none;
     }
     button:active{ transform: translateY(1px); }
     .primary{ background:rgba(122,167,255,0.18); border-color: rgba(122,167,255,0.35); }
@@ -154,7 +127,6 @@
       line-height:1.6;
       white-space:pre-line;
     }
-    *{ -webkit-touch-callout: none; }
   </style>
 </head>
 <body>
@@ -196,7 +168,7 @@
     </div>
   </div>
 
-  <div class="controls" id="controlsRoot">
+  <div class="controls">
     <div class="btnRow">
       <button id="leftBtn">← 左</button>
       <button id="rightBtn">右 →</button>
@@ -241,19 +213,13 @@
   const bgmBtn   = document.getElementById('bgmBtn');
   const seBtn    = document.getElementById('seBtn');
 
-  // ★修正：操作ボタンのタップ既定動作を止める（iOS Safariのズーム対策の決定打）
-  const controlEls = [leftBtn, rightBtn, shootBtn, resetBtn, bgmBtn, seBtn, restartBtn, closeBtn];
-  for (const el of controlEls) {
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); }, { passive: false });
-  }
-
   // 画像
   const imgA = new Image(); imgA.src = 'a.png';
   const imgB = new Image(); imgB.src = 'b.png';
 
   // 背景画像（任意）
   const bgImg = new Image();
-  bgImg.src = 'bg.jpg';
+  bgImg.src = 'bg.png';
   let bgAvailable = false;
   bgImg.onload = () => { bgAvailable = true; };
   bgImg.onerror = () => { bgAvailable = false; };
@@ -289,6 +255,7 @@
     ensureAudio();
     if (bgmNodes) return;
 
+    // 簡易BGM：2オシレーター＋軽いフィルタでループ感
     const master = audioCtx.createGain();
     master.gain.value = 0.03;
 
@@ -311,7 +278,7 @@
     filt.connect(master).connect(audioCtx.destination);
 
     const base = 220;
-    const seq = [0, 3, 5, 7, 5, 3, 0, -2];
+    const seq = [0, 3, 5, 7, 5, 3, 0, -2]; // 半音
     let idx = 0;
 
     const tick = () => {
@@ -355,12 +322,15 @@
   bgmBtn.addEventListener('click', () => setBgm(!bgmOn));
   seBtn.addEventListener('click', () => setSe(!seOn));
 
+  // ワールド
   const WORLD = { w: 960, h: 540, groundPad: 26 };
 
+  // 状態
   let running = true;
   let score = 0;
   let elapsed = 0;
 
+  // ランキング
   const RANK_KEY = 'a_vs_b_rank_v1';
   function loadRank(){
     try{
@@ -381,10 +351,13 @@
   function formatRank(list){
     if (!list.length) return 'Ranking: まだ記録がありません';
     let s = 'Ranking (Top5)\n';
-    list.forEach((r,i)=>{ s += `${i+1}. ${r.score} pt  /  ${r.time.toFixed(1)}s\n`; });
+    list.forEach((r,i)=>{
+      s += `${i+1}. ${r.score} pt  /  ${r.time.toFixed(1)}s\n`;
+    });
     return s.trim();
   }
 
+  // プレイヤー/敵
   const player = {
     x: 180, y: 0, w: 92, h: 92,
     hp: 110, maxHp: 110,
@@ -402,7 +375,7 @@
   const bulletsP = [];
   const bulletsE = [];
   const particles = [];
-  const shockwaves = [];
+  const shockwaves = []; // 必殺技の波
 
   const input = { left:false, right:false };
 
@@ -421,6 +394,7 @@
 
   function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 
+  // 当たり判定を「甘く」：当たり矩形を縮める
   function shrinkRect(r, pad){
     return { x:r.x+pad, y:r.y+pad, w:Math.max(1, r.w-2*pad), h:Math.max(1, r.h-2*pad) };
   }
@@ -456,14 +430,17 @@
     if (player.ultCd > 0) return;
     player.ultCd = 6.5;
 
+    // 衝撃波：広範囲で敵弾消し＋敵に大ダメージ（1回）
     shockwaves.push({ x: player.x + player.w*0.55, y: player.y + player.h*0.55, r: 10, vr: 980, life: 0.45 });
     beep('sawtooth', 180, 0.14, 0.08);
     setTimeout(()=>beep('sawtooth', 140, 0.18, 0.07), 60);
 
+    // 敵弾を消す
     bulletsE.length = 0;
   }
 
   function enemyShoot(){
+    // 追いかけながら狙い撃ち
     const bx = enemy.x + 10;
     const by = enemy.y + enemy.h * 0.58;
 
@@ -479,6 +456,7 @@
     beep('sine', 320, 0.05, 0.045);
   }
 
+  // 入力（canvas）
   let pointerDown=false;
   let lastPX=0;
 
@@ -488,12 +466,12 @@
 
     const p = toWorldFromClient(e.clientX, e.clientY);
     const pr = { x:player.x, y:player.y, w:player.w, h:player.h };
+    // 味方キャラをタップしたら必殺技
     if (rectHit({x:p.x,y:p.y,w:1,h:1}, pr)){
-      ensureAudio();
       ultimate();
       return;
     }
-    ensureAudio();
+    // それ以外は通常攻撃
     shootFromPlayer();
   }, {passive:true});
 
@@ -570,6 +548,7 @@
   function endGame(win){
     running = false;
 
+    // 時間ボーナス：早いほど加点（最低0）
     const timeBonus = Math.max(0, Math.floor((60 - elapsed) * 3));
     const finalScore = score + timeBonus;
 
@@ -591,15 +570,18 @@
     player.cooldown = Math.max(0, player.cooldown - dt);
     player.ultCd    = Math.max(0, player.ultCd - dt);
 
+    // 地面固定
     player.y = WORLD.h - WORLD.groundPad - player.h;
     enemy.y  = WORLD.h - WORLD.groundPad - enemy.h;
 
+    // プレイヤー移動
     let ax = 0;
     if (input.left) ax -= 1;
     if (input.right) ax += 1;
     player.x += ax * player.speed * dt;
     player.x = clamp(player.x, 20, WORLD.w - player.w - 20);
 
+    // 敵AI：追跡（プレイヤーに寄る）。距離でスピード変化
     const centerE = enemy.x + enemy.w*0.5;
     const centerP = player.x + player.w*0.5;
     const dx = centerP - centerE;
@@ -608,9 +590,13 @@
 
     const chaseSpd = clamp(140 + dist*0.45, 160, 360);
     enemy.vx = dir * chaseSpd * 0.95;
+
     enemy.x += enemy.vx * dt;
+
+    // 敵は左側に寄りすぎない（ゲーム性のため）
     enemy.x = clamp(enemy.x, WORLD.w*0.50, WORLD.w - enemy.w - 20);
 
+    // 敵の射撃：HPが減るほど間隔短縮
     enemy.shotT += dt;
     const hpRatio = enemy.hp / enemy.maxHp;
     const interval = clamp(0.95 - (1 - hpRatio)*0.45, 0.45, 0.95);
@@ -619,6 +605,7 @@
       enemyShoot();
     }
 
+    // 弾更新
     for (let i=bulletsP.length-1;i>=0;i--){
       const b = bulletsP[i];
       b.x += b.vx * dt;
@@ -632,6 +619,7 @@
       if (b.x < -60 || b.x > WORLD.w + 60 || b.y < -60 || b.y > WORLD.h + 60) bulletsE.splice(i,1);
     }
 
+    // 必殺技（衝撃波）
     for (let i=shockwaves.length-1;i>=0;i--){
       const s = shockwaves[i];
       s.r += s.vr * dt;
@@ -639,6 +627,7 @@
       if (s.life <= 0) shockwaves.splice(i,1);
     }
 
+    // パーティクル
     for (let i=particles.length-1;i>=0;i--){
       const p = particles[i];
       p.x += p.vx * dt;
@@ -647,12 +636,14 @@
       if (p.life <= 0) particles.splice(i,1);
     }
 
+    // 当たり判定（甘め：矩形を縮める）
     const enemyRectBase  = { x:enemy.x,  y:enemy.y,  w:enemy.w,  h:enemy.h  };
     const playerRectBase = { x:player.x, y:player.y, w:player.w, h:player.h };
 
     const enemyRect  = shrinkRect(enemyRectBase, 10);
     const playerRect = shrinkRect(playerRectBase, 10);
 
+    // 味方弾→敵
     for (let i=bulletsP.length-1;i>=0;i--){
       const b = bulletsP[i];
       const br = { x:b.x-b.r, y:b.y-b.r, w:b.r*2, h:b.r*2 };
@@ -668,6 +659,7 @@
       }
     }
 
+    // 敵弾→味方
     for (let i=bulletsE.length-1;i>=0;i--){
       const b = bulletsE[i];
       const br = { x:b.x-b.r, y:b.y-b.r, w:b.r*2, h:b.r*2 };
@@ -682,10 +674,12 @@
       }
     }
 
+    // 衝撃波→敵（1波で複数回当たらないように、簡易に“半径内”で大ダメ）
     for (const s of shockwaves){
       const ex = enemy.x + enemy.w*0.5;
       const ey = enemy.y + enemy.h*0.55;
       const d = Math.hypot(ex - s.x, ey - s.y);
+      // 波が通過中（リング厚）
       const ring = 30;
       if (d > s.r - ring && d < s.r + ring){
         enemy.hp = Math.max(0, enemy.hp - 22);
@@ -713,10 +707,12 @@
     ctx.save();
     ctx.scale(scale, scale);
 
+    // 背景
     ctx.fillStyle = '#0b0b12';
     ctx.fillRect(0,0, WORLD.w, WORLD.h);
 
     if (bgAvailable){
+      // 背景画像（トリミングしてフィット）
       const iw = bgImg.naturalWidth || 1;
       const ih = bgImg.naturalHeight || 1;
       const sw = iw, sh = ih;
@@ -735,6 +731,7 @@
       ctx.globalAlpha = 1;
     }
 
+    // うっすらパターン
     ctx.globalAlpha = 0.18;
     ctx.strokeStyle = 'rgba(255,255,255,0.20)';
     ctx.lineWidth = 1;
@@ -746,6 +743,7 @@
     }
     ctx.globalAlpha = 1;
 
+    // 地面
     ctx.strokeStyle = 'rgba(255,255,255,0.16)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -753,6 +751,7 @@
     ctx.lineTo(WORLD.w, WORLD.h - WORLD.groundPad);
     ctx.stroke();
 
+    // 必殺技：衝撃波
     for (const s of shockwaves){
       const a = Math.max(0, Math.min(1, s.life / 0.45));
       ctx.strokeStyle = `rgba(122,167,255,${0.35*a})`;
@@ -762,6 +761,7 @@
       ctx.stroke();
     }
 
+    // 弾
     for (const b of bulletsP){
       ctx.fillStyle = 'rgba(122,167,255,0.95)';
       ctx.beginPath();
@@ -775,19 +775,23 @@
       ctx.fill();
     }
 
+    // パーティクル
     for (const p of particles){
       const a = Math.max(0, Math.min(1, p.life / 0.5));
       ctx.fillStyle = `rgba(255,255,255,${0.38*a})`;
       ctx.fillRect(p.x, p.y, 2.4, 2.4);
     }
 
+    // キャラ
     drawChar(imgA, player.x, player.y, player.w, player.h, '味方');
     drawChar(imgB, enemy.x,  enemy.y,  enemy.w,  enemy.h,  '敵');
 
+    // UIテキスト
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
     ctx.font = '14px system-ui, -apple-system, "Noto Sans JP", sans-serif';
     ctx.fillText('味方タップ=必殺技（ShiftでもOK）', 18, 32);
 
+    // 必殺CD表示
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     const cd = Math.max(0, player.ultCd);
     ctx.fillText(`必殺CD: ${cd.toFixed(1)}s`, 18, 52);
@@ -807,6 +811,7 @@
     }
   }
 
+  // ループ
   let last = performance.now();
   function loop(t){
     const dt = Math.min(0.033, (t - last) / 1000);
@@ -816,6 +821,7 @@
     requestAnimationFrame(loop);
   }
 
+  // 初期状態
   setBgm(false);
   setSe(true);
   resetGame();
